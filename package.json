@@ -1,0 +1,23 @@
+{
+  "name": "ascii-studio",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/web",
+    "packages/ascii-core"
+  ],
+  "scripts": {
+    "build:core": "npm run build -w ascii-studio-core",
+    "build": "npm run build:core && npm run build -w ascii-studio-web",
+    "dev": "npm run build:core && npm run dev -w ascii-studio-web",
+    "test": "npm test -w ascii-studio-core",
+    "android:sync": "npm run build && cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.6.0",
+    "@capacitor/core": "8.6.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.6.0"
+  }
+}
