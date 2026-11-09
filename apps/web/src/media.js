@@ -5,6 +5,7 @@ const maximumInputBytes = 32 * 1024 * 1024;
 const maximumFrameSide = 1200;
 export const glyphWidth = 10;
 export const glyphHeight = 18;
+export const MAX_IMAGE_SIDE = 4096;
 
 export async function decodeImage(file) {
   if (file.size > maximumInputBytes) throw new Error("Choose an image smaller than 32 MB.");
@@ -36,14 +37,33 @@ export async function decodeImage(file) {
   }
 }
 
-export function drawGrid(canvas, grid) {
+export function getGridCanvasSize(grid, maxSide = MAX_IMAGE_SIDE, maxPixels = maxSide ** 2) {
   const width = grid.columns * glyphWidth;
   const height = grid.rows * glyphHeight;
+  const scale = Math.min(1, maxSide / Math.max(width, height), Math.sqrt(maxPixels / (width * height)));
+  // Keep both dimensions even for video encoders.
+  return {
+    width: Math.max(2, 2 * Math.floor(width * scale / 2)),
+    height: Math.max(2, 2 * Math.floor(height * scale / 2)),
+  };
+}
+
+export function drawGrid(canvas, grid, { width, height, contain = false } = getGridCanvasSize(grid)) {
   if (canvas.width !== width) canvas.width = width;
   if (canvas.height !== height) canvas.height = height;
   const context = canvas.getContext("2d");
+  context.resetTransform();
   context.fillStyle = "rgb(" + grid.background.join(",") + ")";
   context.fillRect(0, 0, canvas.width, canvas.height);
+  const gridWidth = grid.columns * glyphWidth;
+  const gridHeight = grid.rows * glyphHeight;
+  if (contain) {
+    const scale = Math.min(width / gridWidth, height / gridHeight);
+    context.translate((width - gridWidth * scale) / 2, (height - gridHeight * scale) / 2);
+    context.scale(scale, scale);
+  } else {
+    context.scale(width / gridWidth, height / gridHeight);
+  }
   context.font = "16px monospace";
   context.textAlign = "center";
   context.textBaseline = "middle";

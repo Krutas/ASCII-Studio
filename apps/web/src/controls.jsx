@@ -9,8 +9,9 @@ export const palettes = {
 
 export const initialSettings = { ...palettes.Cosmic, density: 100, invert: false };
 const modes = [["rgb", "Color"], ["grayscale", "Gray"], ["monochrome", "Mono"]];
+const MAX_IMAGE_DENSITY = 800;
 const sliders = [
-  { key: "density", label: "Symbol density", min: 24, max: 160, step: 1 },
+  { key: "density", label: "Symbol density", min: 24, max: MAX_IMAGE_DENSITY, step: 1 },
   { key: "brightness", label: "Brightness", min: -0.4, max: 0.4, step: 0.02 },
   { key: "contrast", label: "Contrast", min: 0.5, max: 2, step: 0.05 },
   { key: "saturation", label: "Saturation", min: 0, max: 2, step: 0.05 },
@@ -32,7 +33,7 @@ export function Presets({ preset, applyPreset }) {
   );
 }
 
-export function Adjustments({ settings, update, reset, maxDensity = 160 }) {
+export function Adjustments({ settings, update, reset, maxDensity = MAX_IMAGE_DENSITY }) {
   return (
     <>
             <div className="segmented" role="group" aria-label="Color mode">

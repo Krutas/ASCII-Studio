@@ -3,7 +3,7 @@ import { Adjustments, initialSettings, palettes, PanelTitle, Presets } from "./c
 import { saveMedia } from "./media.js";
 import demoUrl from "./video-demo.mp4?url";
 import {
-  makeFrameRenderer, MAX_VIDEO_BYTES, MAX_VIDEO_DENSITY, recordAsciiVideo,
+  getVideoGridSize, makeFrameRenderer, MAX_VIDEO_BYTES, MAX_VIDEO_DENSITY, recordAsciiVideo,
   supportedVideoFormats, videoDecoderError, videoMetadata,
 } from "./video.js";
 
@@ -32,6 +32,7 @@ export function VideoStudio() {
   const activeExport = useRef(null);
   const busy = progress !== null || saving;
   const format = formats.find((item) => item.extension === extension);
+  const grid = metadata && getVideoGridSize(metadata, settings.density);
 
   useEffect(() => {
     renderer.current = makeFrameRenderer(preview.current);
@@ -190,7 +191,7 @@ export function VideoStudio() {
           <Presets preset={preset} applyPreset={applyPreset} />
         </aside>
         <section className="panel preview" aria-label="ASCII video preview">
-          <div className="preview-header"><PanelTitle number="03">ASCII preview</PanelTitle><span>VIDEO / MUTED</span></div>
+          <div className="preview-header"><PanelTitle number="03">ASCII preview</PanelTitle><span>{grid ? grid.columns + " × " + grid.rows + " CELLS" : "VIDEO / MUTED"}</span></div>
           <div className="preview-stage video-stage">
             <canvas ref={preview} role="img" aria-label="ASCII video frame" hidden={!metadata} />
             {!metadata && <p className="empty-clip">{clip ? "Decoding the first frame…" : "Choose a clip or try the demo."}</p>}

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { convertToAscii } from "ascii-studio-core";
-import { decodeImage, drawGrid, exportPng, glyphHeight, glyphWidth } from "./media.js";
+import { decodeImage, drawGrid, exportPng, getGridCanvasSize, glyphHeight, glyphWidth, MAX_IMAGE_SIDE } from "./media.js";
 import { makeSample } from "./sample.js";
 import { VideoStudio } from "./VideoStudio.jsx";
 import "./style.css";
@@ -40,6 +40,8 @@ function App() {
   );
 }
 
+const MAX_IMAGE_ROWS = 950;
+
 function ImageStudio({ sample }) {
   const [source, setSource] = useState(sample);
   const [settings, setSettings] = useState(initialSettings);
@@ -48,6 +50,8 @@ function ImageStudio({ sample }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [customResolution, setCustomResolution] = useState(false);
+  const [resolution, setResolution] = useState(null);
   const selection = useRef(0);
   const dragDepth = useRef(0);
   const preview = useRef(null);
@@ -56,14 +60,21 @@ function ImageStudio({ sample }) {
   const frame = useMemo(() => padExtremePortrait(source.frame), [source]);
   const grid = useMemo(() => {
     const { density, ...options } = settings;
-    const fitColumns = Math.floor(190 * frame.width / frame.height / cellAspect);
+    const fitColumns = Math.floor(MAX_IMAGE_ROWS * frame.width / frame.height / cellAspect);
     const columns = Math.max(1, Math.min(density, fitColumns));
     return convertToAscii(frame, { ...options, columns, cellAspect, background: [7, 10, 20] });
   }, [frame, settings, cellAspect]);
 
+  const automaticSize = getGridCanvasSize(grid);
+  const dimensions = resolution ?? automaticSize;
+  const resolutionValid = validDimension(dimensions.width) && validDimension(dimensions.height);
+  const contain = customResolution && resolutionValid;
+  const width = contain ? Number(dimensions.width) : automaticSize.width;
+  const height = contain ? Number(dimensions.height) : automaticSize.height;
+
   useEffect(() => {
-    drawGrid(preview.current, grid);
-  }, [grid]);
+    drawGrid(preview.current, grid, { width, height, contain });
+  }, [grid, width, height, contain]);
 
   function update(key, value) {
     setSettings((current) => ({ ...current, [key]: value }));
@@ -157,7 +168,7 @@ function ImageStudio({ sample }) {
             <div className="preview-stage">
               <canvas ref={preview} role="img" aria-label={"ASCII conversion of " + source.name} />
             </div>
-            <div className="preview-footer"><span>● LIVE PREVIEW</span><span>PNG / {grid.columns * glyphWidth} × {grid.rows * glyphHeight}</span></div>
+            <div className="preview-footer"><span>● LIVE PREVIEW</span><span>PNG / {width} × {height}</span></div>
           </section>
           <aside className="panel settings">
             <PanelTitle number="04">Adjust</PanelTitle>
@@ -165,17 +176,45 @@ function ImageStudio({ sample }) {
           </aside>
           <footer className="panel actions">
             <p role="status" className={status.error ? "error" : ""}>{status.text || "Your images stay on this device."}</p>
-            <button type="button" className="export" onClick={saveImage} disabled={saving || loading}>
-              <span aria-hidden="true">↓</span> {saving ? "Exporting…" : "Export PNG"}
-            </button>
+            <div className="image-export">
+              <label className="format-label">PNG resolution
+                <select value={customResolution ? "custom" : "auto"} onChange={(event) => {
+                  if (!resolution) setResolution(automaticSize);
+                  setCustomResolution(event.target.value === "custom");
+                }}>
+                  <option value="auto">Auto</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </label>
+              {customResolution && <div className="image-dimensions">
+                {[["width", "Width"], ["height", "Height"]].map(([key, label]) => (
+                  <label key={key}>{label}
+                    <input type="number" min="1" max={MAX_IMAGE_SIDE} step="1" required
+                      value={dimensions[key]} aria-invalid={!validDimension(dimensions[key])}
+                      onChange={(event) => setResolution({ ...dimensions, [key]: event.target.value })} />
+                  </label>
+                ))}
+              </div>}
+              <button type="button" className="export" onClick={saveImage}
+                disabled={saving || loading || (customResolution && !resolutionValid)}>
+                <span aria-hidden="true">↓</span> {saving ? "Exporting…" : "Export PNG"}
+              </button>
+              {customResolution && !resolutionValid &&
+                <p className="error" role="status">Enter a width and height from 1 to {MAX_IMAGE_SIDE} px.</p>}
+            </div>
           </footer>
         </div>
       </main>
   );
 }
 
+function validDimension(value) {
+  const dimension = Number(value);
+  return Number.isInteger(dimension) && dimension >= 1 && dimension <= MAX_IMAGE_SIDE;
+}
+
 function padExtremePortrait(frame) {
-  const width = Math.ceil(frame.height * (glyphWidth / glyphHeight) / 190);
+  const width = Math.ceil(frame.height * (glyphWidth / glyphHeight) / MAX_IMAGE_ROWS);
   if (width <= frame.width) return frame;
   const canvas = document.createElement("canvas");
   canvas.width = width;

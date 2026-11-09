@@ -128,3 +128,14 @@ h2 span { color: var(--accent); font-weight: 500; font-size: 11px; }
   .video-buttons { width: 100%; }
   .mode-switch button { padding-inline: 9px; }
 }
+
+.image-export { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.image-dimensions { display: flex; align-items: center; gap: 8px; }
+.image-dimensions label { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12px; }
+.image-dimensions input { width: 64px; min-height: 40px; border: 1px solid var(--line); background: #11182a; color: #e9edfb; }
+.image-dimensions input[aria-invalid="true"] { border-color: #ffaaa8; }
+.image-export > .error { flex-basis: 100%; text-align: right; }
+@media (max-width: 620px) {
+  .image-export { width: 100%; justify-content: flex-start; }
+  .image-export > .error { text-align: left; }
+}

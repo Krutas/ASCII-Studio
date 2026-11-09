@@ -1,13 +1,15 @@
 import { convertToAscii } from "ascii-studio-core";
-import { drawGrid, glyphWidth, glyphHeight } from "./media.js";
+import { makeGridRasterizer } from "./gridRaster.js";
+import { drawGrid, getGridCanvasSize, glyphWidth, glyphHeight } from "./media.js";
 
 export const MAX_VIDEO_SECONDS = 30;
 export const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
-export const MAX_VIDEO_DENSITY = 120;
+export const MAX_VIDEO_DENSITY = 600;
+const MAX_VIDEO_ROWS = 400;
 const MAX_EXPORT_BYTES = 16 * 1024 * 1024;
 const EXPORT_FPS = 24;
 const FORMATS = [
-  { extension: "mp4", mimeTypes: ["video/mp4;codecs=avc1.42001f", "video/mp4"] },
+  { extension: "mp4", mimeTypes: ["video/mp4;codecs=avc1.42002a", "video/mp4", "video/mp4;codecs=avc1.42001f"] },
   { extension: "webm", mimeTypes: ["video/webm;codecs=vp8", "video/webm"] },
 ];
 
@@ -37,17 +39,27 @@ export function videoDecoderError(video) {
     : "This device cannot open the clip. Try an MP4 or WebM with a supported codec.");
 }
 
+export function getVideoGridSize({ width, height }, density) {
+  const rowRatio = height / width * glyphWidth / glyphHeight;
+  const columns = Math.max(1, Math.min(density, Math.floor(MAX_VIDEO_ROWS / rowRatio)));
+  const rows = Math.min(MAX_VIDEO_ROWS, Math.max(1, Math.round(columns * rowRatio)));
+  return { columns, rows };
+}
+
 export function makeFrameRenderer(output) {
+  const rasterize = makeGridRasterizer(output);
   const sample = document.createElement("canvas");
   const context = sample.getContext("2d", { willReadFrequently: true });
 
   return (video, settings) => {
     const { density, ...options } = settings;
-    const rowRatio = video.videoHeight / video.videoWidth * glyphWidth / glyphHeight;
-    const columns = Math.max(1, Math.min(density, Math.floor(80 / rowRatio)));
-    const rows = Math.min(80, Math.max(1, Math.round(columns * rowRatio)));
-    const width = columns * 3;
-    const height = rows * 3;
+    const { columns, rows } = getVideoGridSize({
+      width: video.videoWidth, height: video.videoHeight,
+    }, density);
+    const dense = columns > 120 || rows > 80;
+    const sampleScale = dense ? 1 : 3;
+    const width = columns * sampleScale;
+    const height = rows * sampleScale;
     if (sample.width !== width) sample.width = width;
     if (sample.height !== height) sample.height = height;
     context.drawImage(video, 0, 0, width, height);
@@ -55,7 +67,9 @@ export function makeFrameRenderer(output) {
     const grid = convertToAscii(context.getImageData(0, 0, width, height), {
       ...options, columns, cellAspect: 1, background: [7, 10, 20],
     });
-    drawGrid(output, grid);
+    const size = getGridCanvasSize(grid, 1920, 1920 * 1080);
+    if (dense) rasterize(grid, size);
+    else drawGrid(output, grid, size);
     return grid;
   };
 }
@@ -106,7 +120,7 @@ export async function recordAsciiVideo({ url, settings, format, signal, onProgre
       const listeners = new AbortController();
       const chunks = [];
       let bytes = 0;
-      let frameRequest;
+      let frameTimer;
       let lastFrame = 0;
       let complete = false;
 
@@ -116,7 +130,7 @@ export async function recordAsciiVideo({ url, settings, format, signal, onProgre
 
       function cleanup() {
         listeners.abort();
-        cancelAnimationFrame(frameRequest);
+        clearInterval(frameTimer);
         clearTimeout(timeout);
         signal.removeEventListener("abort", abort);
       }
@@ -137,7 +151,6 @@ export async function recordAsciiVideo({ url, settings, format, signal, onProgre
             lastFrame = now;
             onProgress(Math.min(now / duration, 0.99));
           }
-          frameRequest = requestAnimationFrame(tick);
         } catch (error) {
           fail(error);
         }
@@ -163,7 +176,7 @@ export async function recordAsciiVideo({ url, settings, format, signal, onProgre
       }, { signal: listeners.signal });
       video.addEventListener("ended", () => {
         complete = true;
-        cancelAnimationFrame(frameRequest);
+        clearInterval(frameTimer);
         if (recorder.state !== "inactive") recorder.stop();
       }, { signal: listeners.signal });
       video.addEventListener("error", () => fail(videoDecoderError(video)), { signal: listeners.signal });
@@ -177,7 +190,10 @@ export async function recordAsciiVideo({ url, settings, format, signal, onProgre
         recorder.start(250);
         stream.getVideoTracks()[0]?.requestFrame?.();
         video.play().then(() => {
-          if (!listeners.signal.aborted && !complete) frameRequest = requestAnimationFrame(tick);
+          if (!listeners.signal.aborted && !complete) {
+            // The recording canvas is detached, so browser animation callbacks can be throttled.
+            frameTimer = setInterval(tick, 1000 / EXPORT_FPS);
+          }
         }, fail);
       } catch (error) {
         fail(error);
