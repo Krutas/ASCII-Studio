@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ASCII Studio</string>
+    <string name="title_activity_main">ASCII Studio</string>
+    <string name="package_name">lt.krutas.asciistudio</string>
+    <string name="custom_url_scheme">lt.krutas.asciistudio</string>
+</resources>
