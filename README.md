@@ -2,6 +2,16 @@
 
 A local image and video to ASCII converter. The web interface and the Android shell use the same React application and standalone TypeScript core.
 
+## See it in action
+
+Choose a style preset and adjust the image preview before exporting a PNG.
+
+![ASCII Studio image preview switching between Cosmic, Matrix and Retro presets](docs/images/image-studio.gif)
+
+Preview a video as ASCII and change its style while it plays.
+
+![ASCII Studio playing the built-in video demo and switching to the Matrix preset](docs/images/video-studio.gif)
+
 | Project | Purpose |
 | --- | --- |
 | apps/web | File selection, presets, Canvas preview, PNG and video export |
