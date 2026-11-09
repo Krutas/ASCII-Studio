@@ -107,3 +107,24 @@ h2 span { color: var(--accent); font-weight: 500; font-size: 11px; }
   .actions { flex-wrap: wrap; }
   .export { width: 100%; }
 }
+
+.mode-switch { display: inline-flex; gap: 4px; }
+.mode-switch button, .video-transport button, .format-label select {
+  background: #11182a; color: #e9edfb; border: 1px solid var(--line); padding: 7px 12px; min-height: 40px;
+}
+.mode-switch button[aria-pressed="true"] { border-color: var(--accent-strong); background: #25173b; color: #e3c6ff; }
+.video-stage { position: relative; overflow: hidden; }
+.video-stage canvas[hidden] { display: none; }
+.video-decoder { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.empty-clip { color: var(--muted); text-align: center; }
+.video-transport { display: flex; align-items: center; gap: 9px; padding: 9px 12px; }
+.video-transport input { flex: 1; min-width: 0; accent-color: var(--accent-strong); }
+.video-transport span { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.video-buttons, .format-label { display: flex; align-items: center; gap: 8px; }
+.format-label { color: var(--muted); font-size: 12px; }
+.video-actions progress { width: min(100%, 260px); accent-color: var(--accent-strong); }
+@media (max-width: 620px) {
+  .topbar .local { display: none; }
+  .video-buttons { width: 100%; }
+  .mode-switch button { padding-inline: 9px; }
+}

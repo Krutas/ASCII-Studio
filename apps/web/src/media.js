@@ -37,8 +37,10 @@ export async function decodeImage(file) {
 }
 
 export function drawGrid(canvas, grid) {
-  canvas.width = grid.columns * glyphWidth;
-  canvas.height = grid.rows * glyphHeight;
+  const width = grid.columns * glyphWidth;
+  const height = grid.rows * glyphHeight;
+  if (canvas.width !== width) canvas.width = width;
+  if (canvas.height !== height) canvas.height = height;
   const context = canvas.getContext("2d");
   context.fillStyle = "rgb(" + grid.background.join(",") + ")";
   context.fillRect(0, 0, canvas.width, canvas.height);
@@ -76,16 +78,22 @@ function readDataUrl(blob) {
 }
 
 export async function exportPng(canvas, sourceName) {
+  return saveMedia(await makePng(canvas), sourceName, "png");
+}
+
+export async function saveMedia(blob, sourceName, extension) {
   const basename = sourceName.replace(/\.[^.]+$/, "").replace(/[^a-z0-9_-]+/gi, "-").slice(0, 64);
-  const name = (basename || "ascii") + "-ascii.png";
-  const png = await makePng(canvas);
+  const name = (basename || "ascii") + "-ascii." + extension;
 
   if (Capacitor.getPlatform() === "android") {
-    const dataUrl = await readDataUrl(png);
-    return androidExport.savePng({ name, base64: dataUrl.split(",")[1] });
+    const dataUrl = await readDataUrl(blob);
+    const options = { name, base64: dataUrl.split(",")[1] };
+    return extension === "png" ? androidExport.savePng(options) : androidExport.saveVideo({
+      ...options, mimeType: extension === "mp4" ? "video/mp4" : "video/webm",
+    });
   }
 
-  const url = URL.createObjectURL(png);
+  const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = name;

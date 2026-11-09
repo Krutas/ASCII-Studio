@@ -18,16 +18,30 @@ import java.io.OutputStream;
 public class ImageExportPlugin extends Plugin {
     @PluginMethod
     public void savePng(PluginCall call) {
+        chooseDestination(call, "image/png");
+    }
+
+    @PluginMethod
+    public void saveVideo(PluginCall call) {
+        String mimeType = call.getString("mimeType");
+        if (!"video/mp4".equals(mimeType) && !"video/webm".equals(mimeType)) {
+            call.reject("Unsupported video export format.");
+            return;
+        }
+        chooseDestination(call, mimeType);
+    }
+
+    private void chooseDestination(PluginCall call, String mimeType) {
         String name = call.getString("name");
         String data = call.getString("base64");
         if (name == null || data == null || data.isEmpty()) {
-            call.reject("PNG data and filename are required.");
+            call.reject("Media data and filename are required.");
             return;
         }
 
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT)
             .addCategory(Intent.CATEGORY_OPENABLE)
-            .setType("image/png")
+            .setType(mimeType)
             .putExtra(Intent.EXTRA_TITLE, name);
 
         try {
@@ -47,10 +61,10 @@ public class ImageExportPlugin extends Plugin {
             return;
         }
 
-        bridge.execute(() -> writePng(call, uri));
+        bridge.execute(() -> writeMedia(call, uri));
     }
 
-    private void writePng(PluginCall call, Uri uri) {
+    private void writeMedia(PluginCall call, Uri uri) {
         try {
             try (OutputStream output = getContext().getContentResolver().openOutputStream(uri, "wt")) {
                 if (output == null) throw new IOException("No output stream");
@@ -58,7 +72,7 @@ public class ImageExportPlugin extends Plugin {
             }
             call.resolve(new JSObject().put("saved", true));
         } catch (IOException | RuntimeException error) {
-            call.reject("Could not write the PNG to the selected location.", error);
+            call.reject("Could not write the file to the selected location.", error);
         }
     }
 }

@@ -3,30 +3,44 @@ import { createRoot } from "react-dom/client";
 import { convertToAscii } from "ascii-studio-core";
 import { decodeImage, drawGrid, exportPng, glyphHeight, glyphWidth } from "./media.js";
 import { makeSample } from "./sample.js";
+import { VideoStudio } from "./VideoStudio.jsx";
 import "./style.css";
 
-const palettes = {
-  Cosmic: { charset: " .:-=+*#%@", colorMode: "rgb", brightness: 0.08, contrast: 1.15, saturation: 1.3, foreground: [224, 236, 255] },
-  Classic: { charset: " .:-=+*#%@", colorMode: "grayscale", brightness: 0, contrast: 1, saturation: 1, foreground: [224, 236, 255] },
-  Matrix: { charset: " .:01xX#@", colorMode: "monochrome", brightness: 0, contrast: 1.2, saturation: 1, foreground: [92, 255, 163] },
-  Retro: { charset: " .:*oO#@", colorMode: "monochrome", brightness: 0.05, contrast: 1.1, saturation: 1, foreground: [255, 192, 106] },
-};
-
-const initialSettings = { ...palettes.Cosmic, density: 100, invert: false };
-const modes = [["rgb", "Color"], ["grayscale", "Gray"], ["monochrome", "Mono"]];
-const sliders = [
-  { key: "density", label: "Symbol density", min: 24, max: 160, step: 1 },
-  { key: "brightness", label: "Brightness", min: -0.4, max: 0.4, step: 0.02 },
-  { key: "contrast", label: "Contrast", min: 0.5, max: 2, step: 0.05 },
-  { key: "saturation", label: "Saturation", min: 0, max: 2, step: 0.05 },
-];
-
-function PanelTitle({ number, children }) {
-  return <h2><span>{number}</span>{children}</h2>;
-}
+import { Adjustments, initialSettings, palettes, PanelTitle, Presets } from "./controls.jsx";
 
 function App() {
   const [sample] = useState(makeSample);
+  const [mode, setMode] = useState("image");
+  const backdrop = useRef(null);
+
+  useEffect(() => {
+    const grid = convertToAscii(sample.frame, {
+      columns: 150, cellAspect: glyphWidth / glyphHeight,
+      brightness: 0.12, saturation: 1.6, background: [7, 10, 20],
+    });
+    drawGrid(backdrop.current, grid);
+  }, [sample]);
+
+  return (
+    <div className="studio">
+      <div className="backdrop" aria-hidden="true"><canvas ref={backdrop} /></div>
+      <header className="topbar">
+        <div className="brand"><span className="brand-icon" aria-hidden="true">A<span>_</span></span>
+          <div><strong>ASCII Studio</strong><small>MEDIA CONVERTER</small></div>
+        </div>
+        <nav className="mode-switch" aria-label="Conversion mode">
+          <button type="button" aria-pressed={mode === "image"} onClick={() => setMode("image")}>Image</button>
+          <button type="button" aria-pressed={mode === "video"} onClick={() => setMode("video")}>Video</button>
+        </nav>
+        <span className="local"><i /> LOCAL PROCESSING</span>
+      </header>
+      <div hidden={mode !== "image"}><ImageStudio sample={sample} /></div>
+      {mode === "video" && <VideoStudio />}
+    </div>
+  );
+}
+
+function ImageStudio({ sample }) {
   const [source, setSource] = useState(sample);
   const [settings, setSettings] = useState(initialSettings);
   const [preset, setPreset] = useState("Cosmic");
@@ -37,7 +51,6 @@ function App() {
   const selection = useRef(0);
   const dragDepth = useRef(0);
   const preview = useRef(null);
-  const backdrop = useRef(null);
 
   const cellAspect = glyphWidth / glyphHeight;
   const frame = useMemo(() => padExtremePortrait(source.frame), [source]);
@@ -51,14 +64,6 @@ function App() {
   useEffect(() => {
     drawGrid(preview.current, grid);
   }, [grid]);
-
-  useEffect(() => {
-    const grid = convertToAscii(sample.frame, {
-      columns: 150, cellAspect: glyphWidth / glyphHeight,
-      brightness: 0.12, saturation: 1.6, background: [7, 10, 20],
-    });
-    drawGrid(backdrop.current, grid);
-  }, [sample]);
 
   function update(key, value) {
     setSettings((current) => ({ ...current, [key]: value }));
@@ -111,14 +116,6 @@ function App() {
   }
 
   return (
-    <div className="studio">
-      <div className="backdrop" aria-hidden="true"><canvas ref={backdrop} /></div>
-      <header className="topbar">
-        <div className="brand"><span className="brand-icon" aria-hidden="true">A<span>_</span></span>
-          <div><strong>ASCII Studio</strong><small>IMAGE CONVERTER</small></div>
-        </div>
-        <span className="local"><i /> LOCAL PROCESSING</span>
-      </header>
       <main>
         <div className="intro">
           <p className="eyebrow">SIGNAL / 01</p>
@@ -153,13 +150,7 @@ function App() {
             <button type="button" className="quiet" onClick={restoreSample} disabled={source === sample && !loading && !status.error}>Use sample image</button>
             <div className="separator" />
             <PanelTitle number="02">Style presets</PanelTitle>
-            <div className="presets">
-              {Object.keys(palettes).map((name, index) => (
-                <button type="button" key={name} aria-pressed={preset === name} onClick={() => applyPreset(name)}>
-                  <span aria-hidden="true">{["✦", "#", "01", "▥"][index]}</span>{name}
-                </button>
-              ))}
-            </div>
+            <Presets preset={preset} applyPreset={applyPreset} />
           </aside>
           <section className="panel preview" aria-label="ASCII preview">
             <div className="preview-header"><PanelTitle number="03">ASCII preview</PanelTitle><span>{grid.columns} × {grid.rows} CELLS</span></div>
@@ -170,18 +161,7 @@ function App() {
           </section>
           <aside className="panel settings">
             <PanelTitle number="04">Adjust</PanelTitle>
-            <div className="segmented" role="group" aria-label="Color mode">
-              {modes.map(([value, label]) => <button type="button" key={value} aria-pressed={settings.colorMode === value}
-                onClick={() => update("colorMode", value)}>{label}</button>)}
-            </div>
-            {sliders.map(({ key, label, min, max, step }) => (
-              <label key={key} className="slider">
-                <span>{label}<output>{key === "density" ? settings[key] : settings[key].toFixed(2)}</output></span>
-                <input type="range" min={min} max={max} step={step} value={settings[key]} onChange={(event) => update(key, Number(event.target.value))} />
-              </label>
-            ))}
-            <label className="check"><input type="checkbox" checked={settings.invert} onChange={(event) => update("invert", event.target.checked)} /> Invert symbols</label>
-            <button type="button" className="quiet" onClick={() => { setSettings(initialSettings); setPreset("Cosmic"); }}>Reset settings</button>
+            <Adjustments settings={settings} update={update} reset={() => { setSettings(initialSettings); setPreset("Cosmic"); }} />
           </aside>
           <footer className="panel actions">
             <p role="status" className={status.error ? "error" : ""}>{status.text || "Your images stay on this device."}</p>
@@ -191,7 +171,6 @@ function App() {
           </footer>
         </div>
       </main>
-    </div>
   );
 }
 

@@ -1,7 +1,7 @@
 name: Android debug APK
 on:
   push:
-    branches: [feat/studio-apps, main]
+    branches: [feat/studio-apps, feat/video-section, main]
     paths: ["apps/web/**", "android/**", "packages/ascii-core/**", "capacitor.config.json", "package*.json", ".github/workflows/android-debug.yml"]
   workflow_dispatch:
 
