@@ -9,16 +9,26 @@ const MAX_VIDEO_ROWS = 400;
 const MAX_EXPORT_BYTES = 16 * 1024 * 1024;
 const EXPORT_FPS = 24;
 const FORMATS = [
-  { extension: "mp4", mimeTypes: ["video/mp4;codecs=avc1.42002a", "video/mp4", "video/mp4;codecs=avc1.42001f"] },
-  { extension: "webm", mimeTypes: ["video/webm;codecs=vp8", "video/webm"] },
+  {
+    extension: "mp4",
+    mimeTypes: ["video/mp4;codecs=avc1.42002a", "video/mp4", "video/mp4;codecs=avc1.42001f"],
+    withAudio: ['video/mp4;codecs="avc1.42002a,mp4a.40.2"', "video/mp4"],
+  },
+  {
+    extension: "webm",
+    mimeTypes: ["video/webm;codecs=vp8", "video/webm"],
+    withAudio: ['video/webm;codecs="vp8,opus"', "video/webm"],
+  },
 ];
 
-export function supportedVideoFormats() {
+export function supportedVideoFormats(includeAudio = false) {
+  if (includeAudio && typeof globalThis.AudioContext !== "function") return [];
   if (typeof globalThis.MediaRecorder?.isTypeSupported !== "function" ||
       typeof HTMLCanvasElement.prototype.captureStream !== "function") return [];
 
-  return FORMATS.flatMap(({ extension, mimeTypes }) => {
-    const mimeType = mimeTypes.find((type) => MediaRecorder.isTypeSupported(type));
+  return FORMATS.flatMap(({ extension, mimeTypes, withAudio }) => {
+    const candidates = includeAudio ? withAudio : mimeTypes;
+    const mimeType = candidates.find((type) => MediaRecorder.isTypeSupported(type));
     return mimeType ? [{ extension, mimeType }] : [];
   });
 }
@@ -74,10 +84,12 @@ export function makeFrameRenderer(output) {
   };
 }
 
-function loadFrame(video, url, signal) {
+function loadFrame(video, url, signal, audioReady = Promise.resolve()) {
   return new Promise((resolve, reject) => {
     const listeners = new AbortController();
-    const timeout = setTimeout(() => finish(new Error("The first video frame did not load.")), 12_000);
+    const timeout = setTimeout(() => finish(new Error(
+      video.readyState >= 2 ? "Could not start audio. Try exporting without sound." : "The first video frame did not load."
+    )), 12_000);
 
     function finish(error) {
       listeners.abort();
@@ -89,7 +101,10 @@ function loadFrame(video, url, signal) {
 
     function abort() { finish(signal.reason); }
 
-    video.addEventListener("loadeddata", () => finish(), { signal: listeners.signal });
+    audioReady.catch(finish);
+    video.addEventListener("loadeddata", () => {
+      audioReady.then(() => finish(), finish);
+    }, { signal: listeners.signal });
     video.addEventListener("error", () => finish(videoDecoderError(video)), { signal: listeners.signal });
     signal.addEventListener("abort", abort, { once: true });
     if (signal.aborted) abort();
@@ -97,23 +112,37 @@ function loadFrame(video, url, signal) {
   });
 }
 
-export async function recordAsciiVideo({ url, settings, format, signal, onProgress }) {
+export async function recordAsciiVideo({ url, settings, format, includeAudio, signal, onProgress }) {
   const video = document.createElement("video");
-  video.muted = true;
+  video.muted = !includeAudio;
   video.playsInline = true;
   video.preload = "auto";
   let stream;
+  let audioContext;
+  let audioTrack;
 
   try {
-    await loadFrame(video, url, signal);
+    let audioReady;
+    if (includeAudio) {
+      audioContext = new AudioContext();
+      const destination = audioContext.createMediaStreamDestination();
+      audioTrack = destination.stream.getAudioTracks()[0];
+      // Route the clip to the recorder only, so export is quiet on the device.
+      audioContext.createMediaElementSource(video).connect(destination);
+      audioReady = audioContext.resume();
+    }
+    await loadFrame(video, url, signal, audioReady);
     signal.throwIfAborted();
     const { duration } = videoMetadata(video);
     const canvas = document.createElement("canvas");
     const render = makeFrameRenderer(canvas);
     render(video, settings);
     stream = canvas.captureStream(EXPORT_FPS);
+    if (audioTrack) stream.addTrack(audioTrack);
     const recorder = new MediaRecorder(stream, {
-      mimeType: format.mimeType, videoBitsPerSecond: 1_800_000,
+      mimeType: format.mimeType,
+      videoBitsPerSecond: 1_800_000,
+      audioBitsPerSecond: includeAudio ? 128_000 : undefined,
     });
 
     return await new Promise((resolve, reject) => {
@@ -200,8 +229,10 @@ export async function recordAsciiVideo({ url, settings, format, signal, onProgre
       }
     });
   } finally {
-    stream?.getTracks().forEach((track) => track.stop());
+    stream?.getVideoTracks().forEach((track) => track.stop());
+    audioTrack?.stop();
     video.pause();
+    if (audioContext) await audioContext.close();
     video.removeAttribute("src");
     video.load();
   }

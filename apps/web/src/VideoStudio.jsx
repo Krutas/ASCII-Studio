@@ -21,8 +21,13 @@ export function VideoStudio() {
   const [playing, setPlaying] = useState(false);
   const [settings, setSettings] = useState(defaults);
   const [preset, setPreset] = useState("Cosmic");
-  const [formats] = useState(supportedVideoFormats);
-  const [extension, setExtension] = useState(formats[0]?.extension ?? "");
+  const [formatOptions] = useState(() => ({
+    silent: supportedVideoFormats(),
+    withAudio: supportedVideoFormats(true),
+  }));
+  const [includeAudio, setIncludeAudio] = useState(formatOptions.withAudio.length > 0);
+  const [muted, setMuted] = useState(true);
+  const [extension, setExtension] = useState("");
   const [progress, setProgress] = useState(null);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState(null);
@@ -31,7 +36,8 @@ export function VideoStudio() {
   const renderer = useRef(null);
   const activeExport = useRef(null);
   const busy = progress !== null || saving;
-  const format = formats.find((item) => item.extension === extension);
+  const formats = includeAudio ? formatOptions.withAudio : formatOptions.silent;
+  const format = formats.find((item) => item.extension === extension) ?? formats[0];
   const grid = metadata && getVideoGridSize(metadata, settings.density);
 
   useEffect(() => {
@@ -131,7 +137,7 @@ export function VideoStudio() {
 
     try {
       const result = await recordAsciiVideo({
-        url: clip.url, settings, format, signal: controller.signal, onProgress: setProgress,
+        url: clip.url, settings, format, includeAudio, signal: controller.signal, onProgress: setProgress,
       });
       controller.signal.throwIfAborted();
       setProgress(null);
@@ -160,7 +166,7 @@ export function VideoStudio() {
       <div className="intro">
         <p className="eyebrow">SIGNAL / 02</p>
         <h1>Turn motion into text.</h1>
-        <p>Convert a short clip into ASCII art and export it as a silent video.</p>
+        <p>Convert a short clip into ASCII art and choose whether to keep its original audio.</p>
       </div>
       <div className="workspace video-workspace">
         <aside className="panel source">
@@ -191,12 +197,12 @@ export function VideoStudio() {
           <Presets preset={preset} applyPreset={applyPreset} />
         </aside>
         <section className="panel preview" aria-label="ASCII video preview">
-          <div className="preview-header"><PanelTitle number="03">ASCII preview</PanelTitle><span>{grid ? grid.columns + " × " + grid.rows + " CELLS" : "VIDEO / MUTED"}</span></div>
+          <div className="preview-header"><PanelTitle number="03">ASCII preview</PanelTitle><span>{grid ? grid.columns + " × " + grid.rows + " CELLS" : "VIDEO"}</span></div>
           <div className="preview-stage video-stage">
             <canvas ref={preview} role="img" aria-label="ASCII video frame" hidden={!metadata} />
             {!metadata && <p className="empty-clip">{clip ? "Decoding the first frame…" : "Choose a clip or try the demo."}</p>}
             {clip && <video className="video-decoder" key={clip.url} ref={decoder} src={clip.url}
-              muted playsInline preload="auto" aria-hidden="true" tabIndex={-1}
+              muted={muted} playsInline preload="auto" aria-hidden="true" tabIndex={-1}
               onLoadedData={ready} onError={failDecode}
               onTimeUpdate={(event) => setTime(event.currentTarget.currentTime)}
               onSeeked={(event) => {
@@ -213,6 +219,8 @@ export function VideoStudio() {
                 decoder.current.currentTime = next;
               }} />
             <span>{clock(time)} / {clock(metadata?.duration)}</span>
+            <button type="button" aria-pressed={!muted} disabled={!metadata || busy}
+              onClick={() => setMuted(!muted)}>Preview sound</button>
           </div>
         </section>
         <aside className="panel settings">
@@ -224,14 +232,20 @@ export function VideoStudio() {
           <div>
             <p role="status" className={status?.error ? "error" : ""}>
               {status?.text || (progress !== null ? "Exporting video… " + Math.round(progress * 100) + "%"
-                : saving ? "Saving video…" : formats.length ? "Export uses the settings selected when it starts. Audio is omitted."
-                  : "Video preview works here. This browser or WebView cannot export video.")}
+                : saving ? "Saving video…" : !format ? "This browser or WebView cannot export video."
+                  : !formatOptions.withAudio.length ? "This browser or WebView supports silent export only."
+                    : "Export uses the settings selected when it starts.")}
             </p>
             {progress !== null && <progress max="1" value={progress} aria-label="Video export progress" />}
           </div>
           <div className="video-buttons">
+            {formatOptions.withAudio.length > 0 && <label className="video-audio">
+              <input type="checkbox" checked={includeAudio} disabled={busy}
+                onChange={(event) => setIncludeAudio(event.target.checked)} />
+              Include original audio
+            </label>}
             {format && <label className="format-label">Format
-              <select value={extension} disabled={busy} onChange={(event) => setExtension(event.target.value)}>
+              <select value={format.extension} disabled={busy} onChange={(event) => setExtension(event.target.value)}>
                 {formats.map(({ extension }) => <option key={extension} value={extension}>{extension.toUpperCase()}</option>)}
               </select>
             </label>}

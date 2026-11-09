@@ -139,3 +139,11 @@ h2 span { color: var(--accent); font-weight: 500; font-size: 11px; }
   .image-export { width: 100%; justify-content: flex-start; }
   .image-export > .error { text-align: left; }
 }
+
+.video-buttons { flex-wrap: wrap; }
+.video-audio { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12px; }
+.video-audio input { accent-color: var(--accent-strong); }
+.video-transport button[aria-pressed="true"] { border-color: var(--accent-strong); color: var(--accent); }
+@media (max-width: 400px) {
+  .video-transport { flex-wrap: wrap; }
+}
