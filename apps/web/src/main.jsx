@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { convertToAscii } from "ascii-studio-core";
-import { decodeImage, drawGrid, exportPng, getGridCanvasSize, glyphHeight, glyphWidth, MAX_IMAGE_SIDE } from "./media.js";
+import { decodeImage, drawGrid, exportPng, getGridCanvasSize, glyphHeight, glyphWidth,
+  MAX_IMAGE_LONG_SIDE, MAX_IMAGE_SHORT_SIDE } from "./media.js";
 import { makeSample } from "./sample.js";
 import { VideoStudio } from "./VideoStudio.jsx";
+import appIcon from "./ascii-studio-icon.png";
 import "./style.css";
 
 import { Adjustments, initialSettings, palettes, PanelTitle, Presets } from "./controls.jsx";
@@ -25,7 +27,7 @@ function App() {
     <div className="studio">
       <div className="backdrop" aria-hidden="true"><canvas ref={backdrop} /></div>
       <header className="topbar">
-        <div className="brand"><span className="brand-icon" aria-hidden="true">A<span>_</span></span>
+        <div className="brand"><img className="brand-icon" src={appIcon} alt="" />
           <div><strong>ASCII Studio</strong><small>MEDIA CONVERTER</small></div>
         </div>
         <nav className="mode-switch" aria-label="Conversion mode">
@@ -45,6 +47,8 @@ const MAX_IMAGE_ROWS = 950;
 function ImageStudio({ sample }) {
   const [source, setSource] = useState(sample);
   const [settings, setSettings] = useState(initialSettings);
+  const [previewSettings, setPreviewSettings] = useState(initialSettings);
+  const [previewResolution, setPreviewResolution] = useState(null);
   const [preset, setPreset] = useState("Cosmic");
   const [status, setStatus] = useState({ text: "", error: false });
   const [loading, setLoading] = useState(false);
@@ -59,18 +63,26 @@ function ImageStudio({ sample }) {
   const cellAspect = glyphWidth / glyphHeight;
   const frame = useMemo(() => padExtremePortrait(source.frame), [source]);
   const grid = useMemo(() => {
-    const { density, ...options } = settings;
+    const { density, ...options } = previewSettings;
     const fitColumns = Math.floor(MAX_IMAGE_ROWS * frame.width / frame.height / cellAspect);
     const columns = Math.max(1, Math.min(density, fitColumns));
     return convertToAscii(frame, { ...options, columns, cellAspect, background: [7, 10, 20] });
-  }, [frame, settings, cellAspect]);
+  }, [frame, previewSettings, cellAspect]);
 
-  const automaticSize = getGridCanvasSize(grid);
+  const automaticSize = getGridCanvasSize(grid, MAX_IMAGE_LONG_SIDE,
+    MAX_IMAGE_LONG_SIDE * MAX_IMAGE_SHORT_SIDE, MAX_IMAGE_SHORT_SIDE);
   const dimensions = resolution ?? automaticSize;
-  const resolutionValid = validDimension(dimensions.width) && validDimension(dimensions.height);
-  const contain = customResolution && resolutionValid;
-  const width = contain ? Number(dimensions.width) : automaticSize.width;
-  const height = contain ? Number(dimensions.height) : automaticSize.height;
+  const widthLimit = Number(dimensions.height) > MAX_IMAGE_SHORT_SIDE ? MAX_IMAGE_SHORT_SIDE : MAX_IMAGE_LONG_SIDE;
+  const heightLimit = Number(dimensions.width) > MAX_IMAGE_SHORT_SIDE ? MAX_IMAGE_SHORT_SIDE : MAX_IMAGE_LONG_SIDE;
+  const resolutionValid = validDimension(dimensions.width, widthLimit) && validDimension(dimensions.height, heightLimit);
+  const contain = previewResolution !== null;
+  const width = previewResolution?.width ?? automaticSize.width;
+  const height = previewResolution?.height ?? automaticSize.height;
+  const settingsChanged = Object.keys(settings).some((key) => settings[key] !== previewSettings[key]);
+  const resolutionChanged = customResolution
+    ? Number(dimensions.width) !== previewResolution?.width || Number(dimensions.height) !== previewResolution?.height
+    : contain;
+  const previewPending = settingsChanged || resolutionChanged;
 
   useEffect(() => {
     drawGrid(preview.current, grid, { width, height, contain });
@@ -84,6 +96,15 @@ function ImageStudio({ sample }) {
   function applyPreset(name) {
     setPreset(name);
     setSettings((current) => ({ ...current, ...palettes[name], invert: false }));
+  }
+
+  function updatePreview() {
+    if (settingsChanged) setPreviewSettings(settings);
+    if (resolutionChanged) {
+      setPreviewResolution(customResolution
+        ? { width: Number(dimensions.width), height: Number(dimensions.height) }
+        : null);
+    }
   }
 
   function restoreSample() {
@@ -165,10 +186,14 @@ function ImageStudio({ sample }) {
           </aside>
           <section className="panel preview" aria-label="ASCII preview">
             <div className="preview-header"><PanelTitle number="03">ASCII preview</PanelTitle><span>{grid.columns} × {grid.rows} CELLS</span></div>
-            <div className="preview-stage">
+            <div className="preview-stage image-preview-stage">
               <canvas ref={preview} role="img" aria-label={"ASCII conversion of " + source.name} />
+              {previewPending && <div className="preview-overlay">
+                <button type="button" className="export" onClick={updatePreview}
+                  disabled={loading || saving || (customResolution && !resolutionValid)}>Preview</button>
+              </div>}
             </div>
-            <div className="preview-footer"><span>● LIVE PREVIEW</span><span>PNG / {width} × {height}</span></div>
+            <div className="preview-footer"><span aria-live="polite">{previewPending ? "Changes pending" : "Preview ready"}</span><span>PNG / {width} × {height}</span></div>
           </section>
           <aside className="panel settings">
             <PanelTitle number="04">Adjust</PanelTitle>
@@ -187,20 +212,20 @@ function ImageStudio({ sample }) {
                 </select>
               </label>
               {customResolution && <div className="image-dimensions">
-                {[["width", "Width"], ["height", "Height"]].map(([key, label]) => (
+                {[["width", "Width", widthLimit], ["height", "Height", heightLimit]].map(([key, label, limit]) => (
                   <label key={key}>{label}
-                    <input type="number" min="1" max={MAX_IMAGE_SIDE} step="1" required
-                      value={dimensions[key]} aria-invalid={!validDimension(dimensions[key])}
+                    <input type="number" min="1" max={limit} step="1" required
+                      value={dimensions[key]} aria-invalid={!validDimension(dimensions[key], limit)}
                       onChange={(event) => setResolution({ ...dimensions, [key]: event.target.value })} />
                   </label>
                 ))}
               </div>}
               <button type="button" className="export" onClick={saveImage}
-                disabled={saving || loading || (customResolution && !resolutionValid)}>
+                disabled={saving || loading || previewPending}>
                 <span aria-hidden="true">↓</span> {saving ? "Exporting…" : "Export PNG"}
               </button>
               {customResolution && !resolutionValid &&
-                <p className="error" role="status">Enter a width and height from 1 to {MAX_IMAGE_SIDE} px.</p>}
+                <p className="error" role="status">Enter whole pixel dimensions within 3840 × 2160 or 2160 × 3840.</p>}
             </div>
           </footer>
         </div>
@@ -208,9 +233,9 @@ function ImageStudio({ sample }) {
   );
 }
 
-function validDimension(value) {
+function validDimension(value, limit) {
   const dimension = Number(value);
-  return Number.isInteger(dimension) && dimension >= 1 && dimension <= MAX_IMAGE_SIDE;
+  return Number.isInteger(dimension) && dimension >= 1 && dimension <= limit;
 }
 
 function padExtremePortrait(frame) {

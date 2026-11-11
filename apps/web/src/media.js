@@ -5,7 +5,8 @@ const maximumInputBytes = 32 * 1024 * 1024;
 const maximumFrameSide = 1200;
 export const glyphWidth = 10;
 export const glyphHeight = 18;
-export const MAX_IMAGE_SIDE = 4096;
+export const MAX_IMAGE_LONG_SIDE = 3840;
+export const MAX_IMAGE_SHORT_SIDE = 2160;
 
 export async function decodeImage(file) {
   if (file.size > maximumInputBytes) throw new Error("Choose an image smaller than 32 MB.");
@@ -37,10 +38,11 @@ export async function decodeImage(file) {
   }
 }
 
-export function getGridCanvasSize(grid, maxSide = MAX_IMAGE_SIDE, maxPixels = maxSide ** 2) {
+export function getGridCanvasSize(grid, maxSide = MAX_IMAGE_LONG_SIDE, maxPixels = maxSide ** 2, maxShortSide = maxSide) {
   const width = grid.columns * glyphWidth;
   const height = grid.rows * glyphHeight;
-  const scale = Math.min(1, maxSide / Math.max(width, height), Math.sqrt(maxPixels / (width * height)));
+  const scale = Math.min(1, maxSide / Math.max(width, height), maxShortSide / Math.min(width, height),
+    Math.sqrt(maxPixels / (width * height)));
   // Keep both dimensions even for video encoders.
   return {
     width: Math.max(2, 2 * Math.floor(width * scale / 2)),
